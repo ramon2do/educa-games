@@ -5,21 +5,45 @@ import sqlite3
 import hashlib
 import os
 import io
+import uuid
 from urllib.parse import urlparse
 import database
 
 PORT = 8000
-current_session_user = None
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 
+# Diccionario de sesiones independientes por navegador { "token_uuid": {user_data} }
+SESSIONS = {}
+
 class EducaRequestHandler(http.server.BaseHTTPRequestHandler):
-    def send_json_response(self, data, status=200):
+
+    def get_session_token(self):
+        cookie_header = self.headers.get('Cookie', '')
+        for cookie in cookie_header.split(';'):
+            cookie = cookie.strip()
+            if cookie.startswith('session_token='):
+                return cookie.split('=')[1]
+        return None
+
+    def get_current_user(self):
+        token = self.get_session_token()
+        if token and token in SESSIONS:
+            return SESSIONS[token]
+        return None
+
+    def send_json_response(self, data, status=200, set_cookie_token=None, clear_cookie=False):
         try:
             body = json.dumps(data).encode('utf-8')
             self.send_response(status)
             self.send_header('Content-Type', 'application/json')
             self.send_header('Content-Length', str(len(body)))
             self.send_header('Access-Control-Allow-Origin', '*')
+
+            if set_cookie_token:
+                self.send_header('Set-Cookie', f'session_token={set_cookie_token}; Path=/; HttpOnly; SameSite=Lax')
+            elif clear_cookie:
+                self.send_header('Set-Cookie', 'session_token=; Path=/; Expires=Thu, 01 Jan 1970 00:00:00 GMT')
+
             self.end_headers()
             self.wfile.write(body)
         except (BrokenPipeError, ConnectionResetError, ConnectionAbortedError):
@@ -51,8 +75,8 @@ class EducaRequestHandler(http.server.BaseHTTPRequestHandler):
         elif path in ['/app.js', '/js/app.js']:
             self.serve_file(os.path.join('js', 'app.js') if os.path.exists(os.path.join(BASE_DIR, 'js', 'app.js')) else 'app.js', 'application/javascript')
         elif path == '/api/session':
-            global current_session_user
-            self.send_json_response({'user': current_session_user})
+            user = self.get_current_user()
+            self.send_json_response({'user': user})
         elif path == '/api/admin/metrics':
             self.handle_admin_metrics()
         elif path == '/api/admin/users':
@@ -78,9 +102,10 @@ class EducaRequestHandler(http.server.BaseHTTPRequestHandler):
         elif path == '/api/register':
             self.handle_register(data)
         elif path == '/api/logout':
-            global current_session_user
-            current_session_user = None
-            self.send_json_response({'success': True})
+            token = self.get_session_token()
+            if token in SESSIONS:
+                del SESSIONS[token]
+            self.send_json_response({'success': True}, clear_cookie=True)
         elif path == '/api/subscription/pay':
             self.handle_subscription_pay(data)
         elif path == '/api/subscription/cancel':
@@ -93,7 +118,6 @@ class EducaRequestHandler(http.server.BaseHTTPRequestHandler):
             self.send_error(404)
 
     def handle_login(self, data):
-        global current_session_user
         email = data.get('email', '').strip().lower()
         password = data.get('password', '').strip()
         hashed = database.hash_password(password)
@@ -110,15 +134,16 @@ class EducaRequestHandler(http.server.BaseHTTPRequestHandler):
         conn.close()
 
         if user:
-            current_session_user = {
+            session_token = str(uuid.uuid4())
+            user_data = {
                 'id': user[0], 'name': user[1], 'email': user[2], 'role': user[3], 'sub_status': user[4]
             }
-            self.send_json_response({'success': True, 'user': current_session_user})
+            SESSIONS[session_token] = user_data
+            self.send_json_response({'success': True, 'user': user_data}, set_cookie_token=session_token)
         else:
             self.send_json_response({'success': False, 'error': 'Credenciales inválidas'}, 401)
 
     def handle_register(self, data):
-        global current_session_user
         name = data.get('name', '').strip()
         email = data.get('email', '').strip().lower()
         password = data.get('password', '').strip()
@@ -138,16 +163,18 @@ class EducaRequestHandler(http.server.BaseHTTPRequestHandler):
             conn.commit()
             conn.close()
 
-            current_session_user = {
+            session_token = str(uuid.uuid4())
+            user_data = {
                 'id': user_id, 'name': name, 'email': email, 'role': 'user', 'sub_status': 'inactive'
             }
-            self.send_json_response({'success': True, 'user': current_session_user})
+            SESSIONS[session_token] = user_data
+            self.send_json_response({'success': True, 'user': user_data}, set_cookie_token=session_token)
         except sqlite3.IntegrityError:
             self.send_json_response({'success': False, 'error': 'El correo ya está registrado'}, 400)
 
     def handle_subscription_pay(self, data):
-        global current_session_user
-        if not current_session_user:
+        current_user = self.get_current_user()
+        if not current_user:
             self.send_json_response({'success': False, 'error': 'No autorizado'}, 401)
             return
         ref = data.get('payment_reference', '').strip()
@@ -161,29 +188,34 @@ class EducaRequestHandler(http.server.BaseHTTPRequestHandler):
             UPDATE subscriptions 
             SET payment_reference = ?, status = 'pending', updated_at = CURRENT_TIMESTAMP 
             WHERE user_id = ?
-        ''', (ref, current_session_user['id']))
+        ''', (ref, current_user['id']))
         conn.commit()
         conn.close()
 
-        current_session_user['sub_status'] = 'pending'
+        current_user['sub_status'] = 'pending'
         self.send_json_response({'success': True})
 
     def handle_subscription_cancel(self):
-        global current_session_user
-        if not current_session_user:
+        current_user = self.get_current_user()
+        if not current_user:
             self.send_json_response({'success': False, 'error': 'No autorizado'}, 401)
             return
 
         conn = database.get_connection()
         cursor = conn.cursor()
-        cursor.execute("UPDATE subscriptions SET status = 'cancelled' WHERE user_id = ?", (current_session_user['id'],))
+        cursor.execute("UPDATE subscriptions SET status = 'cancelled' WHERE user_id = ?", (current_user['id'],))
         conn.commit()
         conn.close()
 
-        current_session_user['sub_status'] = 'cancelled'
+        current_user['sub_status'] = 'cancelled'
         self.send_json_response({'success': True})
 
     def handle_admin_metrics(self):
+        current_user = self.get_current_user()
+        if not current_user or current_user['role'] != 'admin':
+            self.send_json_response({'error': 'No autorizado'}, 403)
+            return
+
         conn = database.get_connection()
         cursor = conn.cursor()
         cursor.execute("SELECT COUNT(*) FROM users")
@@ -201,6 +233,11 @@ class EducaRequestHandler(http.server.BaseHTTPRequestHandler):
         })
 
     def handle_admin_users(self):
+        current_user = self.get_current_user()
+        if not current_user or current_user['role'] != 'admin':
+            self.send_json_response({'error': 'No autorizado'}, 403)
+            return
+
         conn = database.get_connection()
         cursor = conn.cursor()
         cursor.execute('''
@@ -215,6 +252,11 @@ class EducaRequestHandler(http.server.BaseHTTPRequestHandler):
         self.send_json_response(users)
 
     def handle_admin_payments(self):
+        current_user = self.get_current_user()
+        if not current_user or current_user['role'] != 'admin':
+            self.send_json_response({'error': 'No autorizado'}, 403)
+            return
+
         conn = database.get_connection()
         cursor = conn.cursor()
         cursor.execute('''
@@ -230,6 +272,11 @@ class EducaRequestHandler(http.server.BaseHTTPRequestHandler):
         self.send_json_response(payments)
 
     def handle_toggle_vip(self, data):
+        current_user = self.get_current_user()
+        if not current_user or current_user['role'] != 'admin':
+            self.send_json_response({'error': 'No autorizado'}, 403)
+            return
+
         user_id = data.get('user_id')
         if not user_id:
             self.send_json_response({'success': False, 'error': 'ID inválido'}, 400)
@@ -251,13 +298,18 @@ class EducaRequestHandler(http.server.BaseHTTPRequestHandler):
         conn.commit()
         conn.close()
 
-        global current_session_user
-        if current_session_user and current_session_user['id'] == user_id:
-            current_session_user['sub_status'] = new_status
+        for s_token, s_user in SESSIONS.items():
+            if s_user['id'] == user_id:
+                s_user['sub_status'] = new_status
 
         self.send_json_response({'success': True, 'new_status': new_status})
 
     def handle_payment_process(self, data):
+        current_user = self.get_current_user()
+        if not current_user or current_user['role'] != 'admin':
+            self.send_json_response({'error': 'No autorizado'}, 403)
+            return
+
         sub_id = data.get('subscription_id')
         status = data.get('status')
         if not sub_id or status not in ['active', 'cancelled']:
@@ -267,8 +319,18 @@ class EducaRequestHandler(http.server.BaseHTTPRequestHandler):
         conn = database.get_connection()
         cursor = conn.cursor()
         cursor.execute("UPDATE subscriptions SET status = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?", (status, sub_id))
+        
+        cursor.execute("SELECT user_id FROM subscriptions WHERE id = ?", (sub_id,))
+        row = cursor.fetchone()
         conn.commit()
         conn.close()
+
+        if row:
+            u_id = row[0]
+            for s_token, s_user in SESSIONS.items():
+                if s_user['id'] == u_id:
+                    s_user['sub_status'] = status
+
         self.send_json_response({'success': True})
 
 def run_server():
@@ -300,7 +362,8 @@ def application(environ, start_response):
     handler.command = method
     handler.headers = {
         'Content-Type': environ.get('CONTENT_TYPE', ''),
-        'Content-Length': str(request_body_size)
+        'Content-Length': str(request_body_size),
+        'Cookie': environ.get('HTTP_COOKIE', '')
     }
     handler.rfile = io.BytesIO(request_body)
     handler.wfile = io.BytesIO()
@@ -313,6 +376,7 @@ def application(environ, start_response):
             200: "200 OK", 
             400: "400 Bad Request", 
             401: "401 Unauthorized", 
+            403: "403 Forbidden",
             404: "404 Not Found", 
             500: "500 Internal Server Error"
         }

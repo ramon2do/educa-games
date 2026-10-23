@@ -20,7 +20,7 @@ function showNotification(message, type = "success") {
 
 async function checkSession() {
   try {
-    const res = await fetch("/api/session");
+    const res = await fetch("/api/session", { credentials: "same-origin" });
     const data = await res.json();
     currentUser = data.user || null;
     renderHeader();
@@ -166,6 +166,7 @@ async function handleLogin(e) {
   const res = await fetch("/api/login", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
+    credentials: "same-origin",
     body: JSON.stringify({ email, password }),
   });
   const data = await res.json();
@@ -187,6 +188,7 @@ async function handleRegister(e) {
   const res = await fetch("/api/register", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
+    credentials: "same-origin",
     body: JSON.stringify({ name, email, password }),
   });
   const data = await res.json();
@@ -201,7 +203,7 @@ async function handleRegister(e) {
 }
 
 async function logout() {
-  await fetch("/api/logout", { method: "POST" });
+  await fetch("/api/logout", { method: "POST", credentials: "same-origin" });
   currentUser = null;
   renderHeader();
   navigateHome();
@@ -235,6 +237,7 @@ async function submitPaymentReference(e) {
   const res = await fetch("/api/subscription/pay", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
+    credentials: "same-origin",
     body: JSON.stringify({ payment_reference: reference }),
   });
   const data = await res.json();
@@ -249,7 +252,10 @@ async function submitPaymentReference(e) {
 
 async function cancelSubscription() {
   if (!confirm("¿Estás seguro de cancelar tu suscripción?")) return;
-  const res = await fetch("/api/subscription/cancel", { method: "POST" });
+  const res = await fetch("/api/subscription/cancel", {
+    method: "POST",
+    credentials: "same-origin",
+  });
   const data = await res.json();
   if (data.success) {
     currentUser.sub_status = "cancelled";
@@ -310,7 +316,7 @@ function switchAdminTab(tabName) {
 }
 
 async function loadAdminSummary() {
-  const res = await fetch("/api/admin/metrics");
+  const res = await fetch("/api/admin/metrics", { credentials: "same-origin" });
   const data = await res.json();
   const container = document.getElementById("admin-summary-view");
   if (!container) return;
@@ -338,7 +344,7 @@ async function loadAdminSummary() {
 }
 
 async function loadAdminUsers() {
-  const res = await fetch("/api/admin/users");
+  const res = await fetch("/api/admin/users", { credentials: "same-origin" });
   const users = await res.json();
   const container = document.getElementById("admin-users-view");
   if (!container) return;
@@ -389,6 +395,7 @@ async function toggleVipAdmin(userId) {
   const res = await fetch("/api/admin/user/toggle-vip", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
+    credentials: "same-origin",
     body: JSON.stringify({ user_id: userId }),
   });
   const data = await res.json();
@@ -401,7 +408,9 @@ async function toggleVipAdmin(userId) {
 }
 
 async function loadAdminPayments() {
-  const res = await fetch("/api/admin/payments");
+  const res = await fetch("/api/admin/payments", {
+    credentials: "same-origin",
+  });
   const payments = await res.json();
   const container = document.getElementById("admin-payments-view");
   if (!container) return;
@@ -463,6 +472,7 @@ async function processPayment(subId, status) {
   const res = await fetch("/api/admin/payment/process", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
+    credentials: "same-origin",
     body: JSON.stringify({ subscription_id: subId, status }),
   });
   const data = await res.json();
@@ -474,7 +484,6 @@ async function processPayment(subId, status) {
   }
 }
 
-// Validación de seguridad añadida: Bloquea el acceso si no es VIP activo
 function openGame(gameType) {
   if (!currentUser || currentUser.sub_status !== "active") {
     showNotification(
