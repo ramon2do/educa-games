@@ -4,6 +4,7 @@ import json
 import sqlite3
 import hashlib
 import os
+import io
 from urllib.parse import urlparse
 import database
 
@@ -45,10 +46,10 @@ class EducaRequestHandler(http.server.BaseHTTPRequestHandler):
 
         if path in ['/', '/index.html']:
             self.serve_file('index.html', 'text/html')
-        elif path == '/css/styles.css':
-            self.serve_file('css/styles.css', 'text/css')
-        elif path == '/js/app.js':
-            self.serve_file('js/app.js', 'application/javascript')
+        elif path in ['/styles.css', '/css/styles.css']:
+            self.serve_file(os.path.join('css', 'styles.css') if os.path.exists(os.path.join(BASE_DIR, 'css', 'styles.css')) else 'styles.css', 'text/css')
+        elif path in ['/app.js', '/js/app.js']:
+            self.serve_file(os.path.join('js', 'app.js') if os.path.exists(os.path.join(BASE_DIR, 'js', 'app.js')) else 'app.js', 'application/javascript')
         elif path == '/api/session':
             global current_session_user
             self.send_json_response({'user': current_session_user})
@@ -214,7 +215,6 @@ class EducaRequestHandler(http.server.BaseHTTPRequestHandler):
         self.send_json_response(users)
 
     def handle_admin_payments(self):
-        # Muestra TODOS los pagos registrados con referencia (sin filtrar solo pendientes para que no desaparezcan)
         conn = database.get_connection()
         cursor = conn.cursor()
         cursor.execute('''
@@ -280,6 +280,61 @@ def run_server():
         httpd.serve_forever()
     except KeyboardInterrupt:
         print("\n[INFO] Servidor detenido.")
+
+# --- Adaptador WSGI para PythonAnywhere ---
+database.init_db()
+
+def application(environ, start_response):
+    path = environ.get('PATH_INFO', '/')
+    method = environ.get('REQUEST_METHOD', 'GET')
+    
+    try:
+        request_body_size = int(environ.get('CONTENT_LENGTH', 0))
+    except (ValueError, TypeError):
+        request_body_size = 0
+        
+    request_body = environ['wsgi.input'].read(request_body_size) if request_body_size > 0 else b''
+
+    handler = EducaRequestHandler.__new__(EducaRequestHandler)
+    handler.path = path + ('?' + environ['QUERY_STRING'] if environ.get('QUERY_STRING') else '')
+    handler.command = method
+    handler.headers = {
+        'Content-Type': environ.get('CONTENT_TYPE', ''),
+        'Content-Length': str(request_body_size)
+    }
+    handler.rfile = io.BytesIO(request_body)
+    handler.wfile = io.BytesIO()
+
+    response_headers = []
+    response_status = ["200 OK"]
+
+    def custom_send_response(code, message=None):
+        status_messages = {
+            200: "200 OK", 
+            400: "400 Bad Request", 
+            401: "401 Unauthorized", 
+            404: "404 Not Found", 
+            500: "500 Internal Server Error"
+        }
+        response_status[0] = status_messages.get(code, f"{code} OK")
+
+    def custom_send_header(keyword, value):
+        response_headers.append((keyword, value))
+
+    def custom_end_headers():
+        pass
+
+    handler.send_response = custom_send_response
+    handler.send_header = custom_send_header
+    handler.end_headers = custom_end_headers
+
+    if method == 'GET':
+        handler.do_GET()
+    elif method == 'POST':
+        handler.do_POST()
+
+    start_response(response_status[0], response_headers)
+    return [handler.wfile.getvalue()]
 
 if __name__ == "__main__":
     run_server()
