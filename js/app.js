@@ -345,40 +345,42 @@ async function loadAdminUsers() {
 
   container.innerHTML = `
         <div class="bg-slate-800 border border-slate-700 rounded-2xl shadow-xl overflow-hidden">
-            <table class="w-full text-left border-collapse">
-                <thead>
-                    <tr class="border-b border-slate-700 text-xs font-bold text-slate-400 uppercase bg-slate-900/50">
-                        <th class="p-4">Nombre</th>
-                        <th class="p-4">Correo</th>
-                        <th class="p-4">Rol</th>
-                        <th class="p-4">Suscripción</th>
-                        <th class="p-4 text-right">Acción</th>
-                    </tr>
-                </thead>
-                <tbody class="divide-y divide-slate-700 text-sm">
-                    ${users
-                      .map(
-                        (u) => `
-                        <tr>
-                            <td class="p-4 font-bold">${u.name}</td>
-                            <td class="p-4 text-slate-400 text-xs">${u.email}</td>
-                            <td class="p-4"><span class="px-2.5 py-1 rounded-full text-xs font-bold ${u.role === "admin" ? "bg-purple-500/20 text-purple-300" : "bg-slate-700 text-slate-300"}">${u.role.toUpperCase()}</span></td>
-                            <td class="p-4"><span class="px-2.5 py-1 rounded-full text-xs font-bold ${u.sub_status === "active" ? "bg-emerald-500/20 text-emerald-300" : "bg-amber-500/20 text-amber-300"}">${u.sub_status || "inactive"}</span></td>
-                            <td class="p-4 text-right">
-                                ${
-                                  u.email === "admin@educa.ve"
-                                    ? '<span class="text-xs text-slate-500 italic">Protegido</span>'
-                                    : `
-                                    <button onclick="toggleVipAdmin(${u.id})" class="bg-indigo-600 hover:bg-indigo-500 text-white px-3 py-1.5 rounded-xl text-xs font-bold transition">Activar/Desactivar VIP</button>
-                                `
-                                }
-                            </td>
+            <div class="overflow-x-auto">
+                <table class="w-full text-left border-collapse min-w-[650px]">
+                    <thead>
+                        <tr class="border-b border-slate-700 text-xs font-bold text-slate-400 uppercase bg-slate-900/50">
+                            <th class="p-4">Nombre</th>
+                            <th class="p-4">Correo</th>
+                            <th class="p-4">Rol</th>
+                            <th class="p-4">Suscripción</th>
+                            <th class="p-4 text-right">Acción</th>
                         </tr>
-                    `,
-                      )
-                      .join("")}
-                </tbody>
-            </table>
+                    </thead>
+                    <tbody class="divide-y divide-slate-700 text-sm">
+                        ${users
+                          .map(
+                            (u) => `
+                            <tr>
+                                <td class="p-4 font-bold whitespace-nowrap">${u.name}</td>
+                                <td class="p-4 text-slate-400 text-xs whitespace-nowrap">${u.email}</td>
+                                <td class="p-4 whitespace-nowrap"><span class="px-2.5 py-1 rounded-full text-xs font-bold ${u.role === "admin" ? "bg-purple-500/20 text-purple-300" : "bg-slate-700 text-slate-300"}">${u.role.toUpperCase()}</span></td>
+                                <td class="p-4 whitespace-nowrap"><span class="px-2.5 py-1 rounded-full text-xs font-bold ${u.sub_status === "active" ? "bg-emerald-500/20 text-emerald-300" : "bg-amber-500/20 text-amber-300"}">${u.sub_status || "inactive"}</span></td>
+                                <td class="p-4 text-right whitespace-nowrap">
+                                    ${
+                                      u.email === "admin@educa.ve"
+                                        ? '<span class="text-xs text-slate-500 italic">Protegido</span>'
+                                        : `
+                                        <button onclick="toggleVipAdmin(${u.id})" class="bg-indigo-600 hover:bg-indigo-500 text-white px-3 py-1.5 rounded-xl text-xs font-bold transition">Activar/Desactivar VIP</button>
+                                    `
+                                    }
+                                </td>
+                            </tr>
+                        `,
+                          )
+                          .join("")}
+                    </tbody>
+                </table>
+            </div>
         </div>
     `;
 }
@@ -406,51 +408,53 @@ async function loadAdminPayments() {
 
   container.innerHTML = `
         <div class="bg-slate-800 border border-slate-700 rounded-2xl shadow-xl overflow-hidden">
-            <table class="w-full text-left border-collapse">
-                <thead>
-                    <tr class="border-b border-slate-700 text-xs font-bold text-slate-400 uppercase bg-slate-900/50">
-                        <th class="p-4">Usuario</th>
-                        <th class="p-4">Referencia</th>
-                        <th class="p-4">Monto Estimado</th>
-                        <th class="p-4">Estado</th>
-                        <th class="p-4 text-right">Acción / Resultado</th>
-                    </tr>
-                </thead>
-                <tbody class="divide-y divide-slate-700 text-sm">
-                    ${
-                      payments.length === 0
-                        ? `<tr><td colspan="5" class="p-6 text-center text-slate-500">No hay pagos registrados.</td></tr>`
-                        : payments
-                            .map(
-                              (p) => `
-                        <tr>
-                            <td class="p-4 font-bold">${p.user_name}<div class="text-xs text-slate-400 font-normal">${p.user_email}</div></td>
-                            <td class="p-4 font-mono text-indigo-400">${p.payment_reference}</td>
-                            <td class="p-4">4,423.75 VES</td>
-                            <td class="p-4">
-                                <span class="px-2.5 py-1 rounded-full text-xs font-bold ${p.status === "active" ? "bg-emerald-500/20 text-emerald-300" : p.status === "cancelled" ? "bg-rose-500/20 text-rose-300" : "bg-amber-500/20 text-amber-300"}">
-                                    ${p.status === "active" ? "Aprobado" : p.status === "cancelled" ? "Rechazado" : "Pendiente"}
-                                </span>
-                            </td>
-                            <td class="p-4 text-right space-x-2">
-                                ${
-                                  p.status === "pending"
-                                    ? `
-                                    <button onclick="processPayment(${p.id}, 'active')" class="bg-emerald-600 hover:bg-emerald-500 text-white px-3 py-1.5 rounded-xl text-xs font-bold transition">Aprobar</button>
-                                    <button onclick="processPayment(${p.id}, 'cancelled')" class="bg-rose-600 hover:bg-rose-500 text-white px-3 py-1.5 rounded-xl text-xs font-bold transition">Rechazar</button>
-                                `
-                                    : `
-                                    <span class="text-xs font-semibold text-slate-400">Procesado (${p.status === "active" ? "Aprobado" : "Rechazado"})</span>
-                                `
-                                }
-                            </td>
+            <div class="overflow-x-auto">
+                <table class="w-full text-left border-collapse min-w-[700px]">
+                    <thead>
+                        <tr class="border-b border-slate-700 text-xs font-bold text-slate-400 uppercase bg-slate-900/50">
+                            <th class="p-4">Usuario</th>
+                            <th class="p-4">Referencia</th>
+                            <th class="p-4">Monto Estimado</th>
+                            <th class="p-4">Estado</th>
+                            <th class="p-4 text-right">Acción / Resultado</th>
                         </tr>
-                    `,
-                            )
-                            .join("")
-                    }
-                </tbody>
-            </table>
+                    </thead>
+                    <tbody class="divide-y divide-slate-700 text-sm">
+                        ${
+                          payments.length === 0
+                            ? `<tr><td colspan="5" class="p-6 text-center text-slate-500">No hay pagos registrados.</td></tr>`
+                            : payments
+                                .map(
+                                  (p) => `
+                            <tr>
+                                <td class="p-4 font-bold whitespace-nowrap">${p.user_name}<div class="text-xs text-slate-400 font-normal">${p.user_email}</div></td>
+                                <td class="p-4 font-mono text-indigo-400 whitespace-nowrap">${p.payment_reference}</td>
+                                <td class="p-4 whitespace-nowrap">4,423.75 VES</td>
+                                <td class="p-4 whitespace-nowrap">
+                                    <span class="px-2.5 py-1 rounded-full text-xs font-bold ${p.status === "active" ? "bg-emerald-500/20 text-emerald-300" : p.status === "cancelled" ? "bg-rose-500/20 text-rose-300" : "bg-amber-500/20 text-amber-300"}">
+                                        ${p.status === "active" ? "Aprobado" : p.status === "cancelled" ? "Rechazado" : "Pendiente"}
+                                    </span>
+                                </td>
+                                <td class="p-4 text-right whitespace-nowrap space-x-2">
+                                    ${
+                                      p.status === "pending"
+                                        ? `
+                                        <button onclick="processPayment(${p.id}, 'active')" class="bg-emerald-600 hover:bg-emerald-500 text-white px-3 py-1.5 rounded-xl text-xs font-bold transition">Aprobar</button>
+                                        <button onclick="processPayment(${p.id}, 'cancelled')" class="bg-rose-600 hover:bg-rose-500 text-white px-3 py-1.5 rounded-xl text-xs font-bold transition">Rechazar</button>
+                                    `
+                                        : `
+                                        <span class="text-xs font-semibold text-slate-400">Procesado (${p.status === "active" ? "Aprobado" : "Rechazado"})</span>
+                                    `
+                                    }
+                                </td>
+                            </tr>
+                        `,
+                                )
+                                .join("")
+                        }
+                    </tbody>
+                </table>
+            </div>
         </div>
     `;
 }
